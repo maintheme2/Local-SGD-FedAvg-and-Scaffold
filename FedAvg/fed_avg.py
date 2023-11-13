@@ -1,0 +1,2 @@
+class FederateAveraging:
+    pass
