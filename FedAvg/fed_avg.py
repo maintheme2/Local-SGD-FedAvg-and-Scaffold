@@ -1,2 +1,3 @@
 class FederateAveraging:
-    pass
+    def __init__(self):
+        pass
