@@ -1,8 +1,9 @@
 import numpy as np
 
-from FedAvg.fed_avg import FederateAveraging
+from FedAvg.fed_avg import FederatedAveraging
 
-class Scaffold(FederateAveraging):
+
+class Scaffold(FederatedAveraging):
     def __init__(self, **kwargs) -> None:
         super().__init__()
         self.clients_control_variates = [0] * self.clients_num

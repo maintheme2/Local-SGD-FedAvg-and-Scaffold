@@ -1,12 +1,13 @@
-import multiprocessing.dummy as mp
-
-from src.client import Client
-from src.model import all_models
+import multiprocessing as mp
 
 import numpy as np
 import torch
 from torchvision.datasets import MNIST
+from torchvision import transforms
 from torch.utils.data import Subset
+
+from src.client import Client
+from src.model import all_models
 
 all_datasets = {
     "MNIST": MNIST
@@ -15,39 +16,53 @@ all_datasets = {
 
 class Server:
     def __init__(self, model_name="LinearModel", model_params=None,
-                 clients_num=10, threads_num=2,
-                 batch_size=32, dataset_name="MNIST"):
+                 clients_num=10, processes_num=2,
+                 batch_size=32, dataset_name="MNIST", device="cpu"):
         self.model_name = model_name
         self.model_params = model_params if model_params else {}
 
         self.clients_num = clients_num
-        self.threads_num = threads_num
-        self.process_pool = mp.Pool(threads_num)
+        self.processes_num = processes_num
+        self.process_pool = mp.Pool(processes=self.processes_num)
 
         self.dataset_name = dataset_name
         self.batch_size = batch_size
+        self.device = device
+
+        self.test_dataset = None
+        self.test_dataloader = None
 
         self.clients = []
 
         self.global_model = None
 
+        self.logs = dict()
+        self.logs['val_accuracy'] = []
+
     def prepare(self):
         self.init_global_model()
+        self.prepare_test_dataset()
 
         self.create_clients()
         self.prepare_clients()
 
     def init_global_model(self):
-        self.global_model = all_models[self.model_name](**self.model_params)
+        self.global_model = all_models[self.model_name](**self.model_params).to(self.device)
+
+    def prepare_test_dataset(self):
+        self.test_dataset = all_datasets[self.dataset_name]("./datasets", train=False, download=True,
+                                                            transform=transforms.ToTensor())
+        self.test_dataloader = torch.utils.data.DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False)
 
     def create_clients(self):
-        self.clients = self.process_pool.map(
-            lambda _: Client(self.model_name, self.model_params, self.batch_size),
-            range(self.clients_num)
-        )
+        self.clients = [
+            Client(self.model_name, self.model_params, self.batch_size)
+            for _ in range(self.clients_num)
+        ]
 
     def get_clients_parts(self):
-        full_dataset = all_datasets[self.dataset_name]("./datasets", train=True, download=True)
+        full_dataset = all_datasets[self.dataset_name]("./datasets", train=True, download=True,
+                                                       transform=transforms.ToTensor())
 
         samples_per_client = len(full_dataset) // self.clients_num
         if samples_per_client < len(full_dataset.classes):  # TODO: add samples_per_client_threshold as parameter
@@ -85,7 +100,34 @@ class Server:
     def prepare_clients(self):
         clients_parts = self.get_clients_parts()
 
-        self.process_pool.starmap(
-            lambda client, dataset: client.prepare(dataset),
-            zip(self.clients, clients_parts)
-        )
+        for client, dataset in zip(self.clients, clients_parts):
+            client.prepare(dataset)
+
+    def aggregate_clients_weights(self, clients):
+        client_weights = [client.model.get_weights() for client in clients]
+        self.global_model.aggregate_weights(client_weights)
+
+    def send_global_weights_to_clients(self, clients):
+        for client in clients:
+            client.model.load_state_dict(self.global_model.state_dict())
+
+    def validation_step(self):
+        with torch.no_grad():
+            correct = 0
+            total = 0
+
+            for images, labels in self.test_dataloader:
+                images = images.to(self.device)
+                labels = labels.to(self.device)
+
+                outputs = self.global_model(images)
+                _, predicted = torch.max(outputs.data, 1)
+
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+
+            accuracy = 100 * correct / total
+
+            self.logs['val_accuracy'].append(accuracy)
+
+            print(f"Global Model Accuracy: {accuracy:.2f}%")

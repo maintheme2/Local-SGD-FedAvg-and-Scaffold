@@ -1,8 +1,12 @@
+import numpy as np
+from tqdm import tqdm
+
 from src.server import Server
+from src.client import Client
 
 
-class FederateAveraging:
-    def __init__(self, clients_num=10, rounds_num=10, epochs_num=2, client_fraction=0.2,
+class FederatedAveraging:
+    def __init__(self, clients_num=40, rounds_num=10, epochs_num=5, client_fraction=0.2,
                  dataset_name="MNIST", model_name="LinearModel", model_params=None,
                  batch_size=32, lr=0.001, loss="crossentropy",
                  threads_num=2, device="cpu"):
@@ -27,7 +31,32 @@ class FederateAveraging:
     def prepare(self):
         self.server = Server(self.model_name, self.model_params,
                              self.clients_num, self.threads_num,
-                             self.batch_size, self.dataset_name)
+                             self.batch_size, self.dataset_name, self.device)
         self.server.prepare()
 
+    def train(self, verbose=True):
+        print("START TRAINING...") if verbose else None
+        for round in range(self.rounds_num):
+            print('-' * 20)
+            print("Round:", round + 1)
 
+            clients = np.random.choice(self.server.clients, int(self.clients_num * self.client_fraction), replace=False)
+            print("Sending global weights to clients...") if verbose else None
+            self.server.send_global_weights_to_clients(clients)
+
+            print("Clients training...") if verbose else None
+            self.round_step(clients, verbose)
+
+            print("Validating server model...") if verbose else None
+            self.server.validation_step()
+
+            print('-' * 20)
+
+    def round_step(self, clients, verbose):
+        clients_bar = tqdm(clients)
+
+        for client in clients_bar:
+            client.local_update(self.epochs_num)
+
+        print("Aggregating clients weights...") if verbose else None
+        self.server.aggregate_clients_weights(clients)
