@@ -13,10 +13,7 @@ class Client:
         self.train_dataloader = None
         self.batch_size = batch_size
         self.device = device
-
-        self.control_variate = 0
-        self.control_variate_delta = 0
-
+        
         self.logs = dict()
         self.logs['rounds_num'] = 0
         self.logs['losses'] = []
