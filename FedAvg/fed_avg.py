@@ -1,14 +1,14 @@
 import numpy as np
+import torch
 from tqdm import tqdm
 
 from src.server import Server
-from src.client import Client
 
 
 class FederatedAveraging:
     def __init__(self, clients_num=40, rounds_num=10, epochs_num=5, client_fraction=0.2,
                  dataset_name="MNIST", model_name="LinearModel", model_params=None,
-                 batch_size=32, lr=0.001, loss="crossentropy",
+                 batch_size=32, lr=0.01, loss="crossentropy",
                  threads_num=2, device="cpu"):
         self.clients_num = clients_num
         self.rounds_num = rounds_num
@@ -30,6 +30,7 @@ class FederatedAveraging:
 
     def prepare(self):
         self.server = Server(self.model_name, self.model_params,
+                             self.update_weights, self.update_weights,
                              self.clients_num, self.threads_num,
                              self.batch_size, self.dataset_name, self.device)
         self.server.prepare()
@@ -59,4 +60,9 @@ class FederatedAveraging:
             client.local_update(self.epochs_num)
 
         print("Aggregating clients weights...") if verbose else None
-        self.server.aggregate_clients_weights(clients)
+        self.server.global_update(clients)
+
+    def update_weights(self, weights, c=None):
+        with torch.no_grad():
+            for key, value in weights.items():
+                value -= self.lr * value.grad

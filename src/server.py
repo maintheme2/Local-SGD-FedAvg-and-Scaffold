@@ -16,6 +16,7 @@ all_datasets = {
 
 class Server:
     def __init__(self, model_name="LinearModel", model_params=None,
+                 server_optimizer_func=None, client_optimizer_func=None,
                  clients_num=10, processes_num=2,
                  batch_size=32, dataset_name="MNIST", device="cpu"):
         self.model_name = model_name
@@ -32,6 +33,9 @@ class Server:
         self.test_dataset = None
         self.test_dataloader = None
 
+        self.client_optimizer_func = client_optimizer_func
+        self.server_optimizer_func = server_optimizer_func
+
         self.clients = []
 
         self.global_model = None
@@ -47,7 +51,8 @@ class Server:
         self.prepare_clients()
 
     def init_global_model(self):
-        self.global_model = all_models[self.model_name](**self.model_params).to(self.device)
+        self.global_model = all_models[self.model_name](**self.model_params,
+                                                        optimizer_func=self.server_optimizer_func).to(self.device)
 
     def prepare_test_dataset(self):
         self.test_dataset = all_datasets[self.dataset_name]("./datasets", train=False, download=True,
@@ -56,7 +61,7 @@ class Server:
 
     def create_clients(self):
         self.clients = [
-            Client(self.model_name, self.model_params, self.batch_size)
+            Client(self.model_name, self.model_params, self.batch_size, self.client_optimizer_func)
             for _ in range(self.clients_num)
         ]
 
@@ -103,13 +108,39 @@ class Server:
         for client, dataset in zip(self.clients, clients_parts):
             client.prepare(dataset)
 
-    def aggregate_clients_weights(self, clients):
-        client_weights = [client.model.get_weights() for client in clients]
-        self.global_model.aggregate_weights(client_weights)
+    def global_update(self, clients):
+        self.global_model.load_state_dict(
+            self.aggregate_clients_weights(clients)
+        )
+
+    def aggregate_clients_weights(self, clients, mode='weights'):
+        if mode == 'weights':
+            client_weights = [client.model.get_weights() for client in clients]
+        elif mode == 'delta_weights':
+            client_weights = [client.model.delta_weights for client in clients]
+        elif mode == 'delta_c':
+            client_weights = [client.model.delta_control_variate for client in clients]
+        else:
+            client_weights = []
+
+        weights = self.global_model.aggregate_weights(client_weights)
+
+        return weights
 
     def send_global_weights_to_clients(self, clients):
         for client in clients:
             client.model.load_state_dict(self.global_model.state_dict())
+
+    def update_control_variate(self, clients, client_fraction):
+        self.global_model.delta_weights = self.aggregate_clients_weights(clients, mode='delta_weights')
+        self.global_model.delta_control_variate = self.aggregate_clients_weights(clients, mode='delta_c')
+
+        current_state_dict = self.global_model.get_weights()
+        for key in current_state_dict.keys():
+            current_state_dict[key].grad = -1 * self.global_model.delta_weights[key]
+            self.global_model.control_variate[key] += client_fraction * self.global_model.delta_control_variate[key]
+
+        self.global_model.update_weights(self.global_model.get_weights())
 
     def validation_step(self):
         with torch.no_grad():

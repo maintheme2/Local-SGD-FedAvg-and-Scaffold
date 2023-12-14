@@ -4,7 +4,9 @@ import torch.nn.functional as F
 
 
 class LinearModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, hidden_layers_num=1, apply_softmax=False):
+    def __init__(self, input_dim, hidden_dim, output_dim,
+                 optimizer_func=None, hidden_layers_num=1,
+                 apply_softmax=False):
         super(LinearModel, self).__init__()
 
         if hidden_layers_num < 0:
@@ -22,7 +24,19 @@ class LinearModel(nn.Module):
 
         self.softmax = nn.Softmax() if apply_softmax else None
 
-        self.optimizer = torch.optim.Adam(self.parameters())
+        self.update_weights = optimizer_func
+        self.control_variate = {
+            key: torch.zeros(value.shape)
+            for key, value in self.state_dict().items()
+        }
+        self.delta_control_variate = {
+            key: torch.zeros(value.shape)
+            for key, value in self.state_dict().items()
+        }
+        self.delta_weights = {
+            key: torch.zeros(value.shape)
+            for key, value in self.state_dict().items()
+        }
 
     def forward(self, x):
         x = x.view(x.shape[0], -1)
@@ -46,12 +60,12 @@ class LinearModel(nn.Module):
         loss = F.cross_entropy(outputs.cpu(), labels.cpu())
 
         loss.backward()
-        self.optimizer.step()
+        self.update_weights(self.get_weights(), self.control_variate)
 
         return loss.item()
 
     def get_weights(self):
-        return self.state_dict()
+        return self.state_dict(keep_vars=True)
 
     def aggregate_weights(self, weights, mode="mean"):
         new_weights = {}
@@ -62,7 +76,7 @@ class LinearModel(nn.Module):
         else:
             raise NotImplementedError(f"Unknown aggregation mode {mode}!")
 
-        self.load_state_dict(new_weights)
+        return new_weights
 
 
 all_models = {

@@ -3,7 +3,7 @@ import torch.utils.data
 
 
 class Client:
-    def __init__(self, model_name, model_params, batch_size, device="cpu"):
+    def __init__(self, model_name, model_params, batch_size, optimizer_func, device="cpu"):
         self.model_name = model_name
         self.model_params = model_params
 
@@ -13,7 +13,9 @@ class Client:
         self.train_dataloader = None
         self.batch_size = batch_size
         self.device = device
-        
+
+        self.optimizer_func = optimizer_func
+
         self.logs = dict()
         self.logs['rounds_num'] = 0
         self.logs['losses'] = []
@@ -23,7 +25,8 @@ class Client:
         self.init_dataset(dataset)
 
     def init_model(self):
-        self.model = all_models[self.model_name](**self.model_params).to(self.device)
+        self.model = all_models[self.model_name](**self.model_params,
+                                                 optimizer_func=self.optimizer_func).to(self.device)
 
     def init_dataset(self, dataset):
         self.train_dataset = dataset
@@ -44,4 +47,17 @@ class Client:
         self.logs['losses'].append(total_loss / epochs_num)
         self.logs['rounds_num'] += 1
 
-        return self.model.get_weights()
+    def update_control_variate(self, global_model, epochs_num, lr):
+        global_weights = global_model.get_weights()
+        local_weights = self.model.get_weights()
+
+        for key, value in local_weights.items():
+            c_new = (
+                    (self.model.control_variate[key] - global_model.control_variate[key]) +
+                    1 / (self.batch_size * epochs_num * lr) *
+                    (global_weights[key] - value)
+            )
+
+            self.model.delta_weights[key] = value - global_weights[key]
+            self.model.delta_control_variate[key] = c_new - self.model.control_variate[key]
+            self.model.control_variate[key] = c_new
