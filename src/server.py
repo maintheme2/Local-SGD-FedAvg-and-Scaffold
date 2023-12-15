@@ -80,6 +80,7 @@ class Server:
             cls: np.where(full_dataset.targets == cls)[0]
             for cls in classes
         }
+        np.random.seed(478)
         [np.random.shuffle(x) for x in idx_per_class.values()]
 
         clients_parts = [[] for _ in range(self.clients_num)]
@@ -91,9 +92,10 @@ class Server:
                 print(f"Warning: the number of samples for class {cls} is less"
                       f" than number of clients {self.clients_num}!")
 
-            for i in range(0, len(indices) - indices_per_client, indices_per_client):
-                indices_part = indices[i:min(i + indices_per_client, len(indices))]
-                clients_parts[i // indices_per_client].extend(indices_part)
+            for client_idx in range(self.clients_num):
+                clients_parts[client_idx].extend(
+                    indices[indices_per_client * client_idx:indices_per_client * (client_idx + 1)]
+                )
 
         clients_parts = [
             Subset(full_dataset, clients_parts[i])
@@ -142,7 +144,7 @@ class Server:
 
         self.global_model.update_weights(self.global_model.get_weights())
 
-    def validation_step(self):
+    def test_step(self):
         with torch.no_grad():
             correct = 0
             total = 0

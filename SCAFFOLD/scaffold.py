@@ -32,9 +32,9 @@ class Scaffold(FederatedAveraging):
 
             self.round_step(clients, verbose)
 
-            print("Validating server model...") if verbose else None
+            print("Testing server model...") if verbose else None
 
-            self.server.validation_step()
+            self.server.test_step()
 
             print('-' * 20)
 

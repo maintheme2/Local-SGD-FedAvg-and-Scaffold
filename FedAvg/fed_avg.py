@@ -6,9 +6,9 @@ from src.server import Server
 
 
 class FederatedAveraging:
-    def __init__(self, clients_num=40, rounds_num=10, epochs_num=5, client_fraction=0.2,
+    def __init__(self, clients_num=100, rounds_num=80, epochs_num=1, client_fraction=0.2,
                  dataset_name="MNIST", model_name="LinearModel", model_params=None,
-                 batch_size=32, lr=0.01, loss="crossentropy",
+                 batch_size=10, lr=0.1, loss="crossentropy",
                  threads_num=2, device="cpu"):
         self.clients_num = clients_num
         self.rounds_num = rounds_num
@@ -48,8 +48,8 @@ class FederatedAveraging:
             print("Clients training...") if verbose else None
             self.round_step(clients, verbose)
 
-            print("Validating server model...") if verbose else None
-            self.server.validation_step()
+            print("Testing server model...") if verbose else None
+            self.server.test_step()
 
             print('-' * 20)
 
