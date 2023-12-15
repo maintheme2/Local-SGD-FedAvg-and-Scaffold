@@ -7,7 +7,7 @@ from torchvision import transforms
 from torch.utils.data import Subset
 
 from src.client import Client
-from src.model import all_models
+from models import all_models
 
 all_datasets = {
     "MNIST": MNIST

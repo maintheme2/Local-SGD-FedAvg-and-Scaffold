@@ -1,5 +1,6 @@
-from src.model import all_models
 import torch.utils.data
+
+from models import all_models
 
 
 class Client:
