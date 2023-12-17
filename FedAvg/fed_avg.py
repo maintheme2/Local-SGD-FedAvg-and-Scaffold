@@ -6,9 +6,10 @@ from src.server import Server
 
 
 class FederatedAveraging:
-    def __init__(self, clients_num=100, rounds_num=80, epochs_num=1, client_fraction=0.2,
+    def __init__(self, batch_size=10, lr=0.1, clients_num=100, rounds_num=15, 
+                 epochs_num=1, client_fraction=0.2,
                  dataset_name="MNIST", model_name="LinearModel", model_params=None,
-                 batch_size=10, lr=0.1, loss="crossentropy",
+                 loss="crossentropy",
                  threads_num=2, device="cpu"):
         self.clients_num = clients_num
         self.rounds_num = rounds_num
