@@ -16,7 +16,7 @@ class Client:
         self.device = device
 
         self.optimizer_func = optimizer_func
-
+        
         self.logs = dict()
         self.logs['rounds_num'] = 0
         self.logs['losses'] = []
