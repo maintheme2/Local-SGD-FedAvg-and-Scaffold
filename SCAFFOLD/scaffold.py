@@ -47,7 +47,7 @@ class Scaffold(FederatedAveraging):
             client.local_update(self.epochs_num)
             client.update_control_variate(self.server.global_model, self.epochs_num, self.lr)
 
-        print("Updating global control variate...")
+        print("Updating global control variate...") if verbose else None
         self.server.update_control_variate(clients, self.client_fraction)
 
         print("Updating server model...") if verbose else None
