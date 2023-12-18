@@ -6,7 +6,7 @@ from src.server import Server
 
 
 class FederatedAveraging:
-    def __init__(self, batch_size=10, lr=0.1, clients_num=100, rounds_num=15, 
+    def __init__(self, batch_size=10, lr=0.1, clients_num=100, rounds_num=15,
                  epochs_num=1, client_fraction=0.2,
                  dataset_name="MNIST", model_name="LinearModel", model_params=None,
                  loss="crossentropy",
@@ -63,7 +63,7 @@ class FederatedAveraging:
         print("Aggregating clients weights...") if verbose else None
         self.server.global_update(clients)
 
-    def update_weights(self, weights, c=None):
+    def update_weights(self, weights, lr, c=None):
         with torch.no_grad():
             for key, value in weights.items():
-                value -= self.lr * value.grad
+                value -= lr * value.grad

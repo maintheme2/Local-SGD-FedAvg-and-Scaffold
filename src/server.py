@@ -18,7 +18,7 @@ class Server:
     def __init__(self, model_name="LinearModel", model_params=None,
                  server_optimizer_func=None, client_optimizer_func=None,
                  clients_num=10, processes_num=2,
-                 batch_size=32, dataset_name="MNIST", device="cpu"):
+                 global_lr=1, batch_size=32, dataset_name="MNIST", device="cpu"):
         self.model_name = model_name
         self.model_params = model_params if model_params else {}
 
@@ -28,6 +28,7 @@ class Server:
 
         self.dataset_name = dataset_name
         self.batch_size = batch_size
+        self.global_lr = global_lr
         self.device = device
 
         self.test_dataset = None
@@ -142,7 +143,7 @@ class Server:
             current_state_dict[key].grad = -1 * self.global_model.delta_weights[key]
             self.global_model.control_variate[key] += client_fraction * self.global_model.delta_control_variate[key]
 
-        self.global_model.update_weights(self.global_model.get_weights())
+        self.global_model.update_weights(self.global_model.get_weights(), lr=self.global_lr)
 
     def test_step(self):
         with torch.no_grad():

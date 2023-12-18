@@ -7,14 +7,16 @@ from src.server import Server
 
 
 class Scaffold(FederatedAveraging):
-    def __init__(self, **kwargs):
+    def __init__(self, global_lr=1, **kwargs):
         super().__init__(**kwargs)
+
+        self.global_lr = global_lr
 
     def prepare(self):
         self.server = Server(self.model_name, self.model_params,
                              super().update_weights, self.update_weights,
                              self.clients_num, self.threads_num,
-                             self.batch_size, self.dataset_name, self.device)
+                             self.global_lr, self.batch_size, self.dataset_name, self.device)
         self.server.prepare()
 
     def train(self, verbose=True):
@@ -51,7 +53,7 @@ class Scaffold(FederatedAveraging):
         print("Updating server model...") if verbose else None
         self.server.global_update(clients)
 
-    def update_weights(self, weights, c=None):
+    def update_weights(self, weights, lr=0.01, c=None):
         with torch.no_grad():
             for key, value in weights.items():
-                value -= self.lr * (value.grad - c[key] + self.server.global_model.control_variate[key])
+                value -= lr * (value.grad - c[key] + self.server.global_model.control_variate[key])

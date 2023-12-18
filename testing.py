@@ -12,11 +12,13 @@ if __name__ == "__main__":
     #
     # fa.train()
 
-    sc = Scaffold(model_params={
-        'input_dim': 784,
-        'hidden_dim': 200,
-        'output_dim': 10
-    }, device="cpu")
+    sc = Scaffold(
+        model_params={
+            'input_dim': 784,
+            'hidden_dim': 200,
+            'output_dim': 10
+        }, device="cpu",
+    )
     sc.prepare()
 
     sc.train()
