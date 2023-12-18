@@ -18,7 +18,8 @@ class Server:
     def __init__(self, model_name="LinearModel", model_params=None,
                  server_optimizer_func=None, client_optimizer_func=None,
                  clients_num=10, processes_num=2,
-                 global_lr=1, batch_size=32, dataset_name="MNIST", device="cpu"):
+                 global_lr=1, batch_size=32, dataset_name="MNIST", device="cpu",
+                 iid=True):
         self.model_name = model_name
         self.model_params = model_params if model_params else {}
 
@@ -27,6 +28,7 @@ class Server:
         self.process_pool = mp.Pool(processes=self.processes_num)
 
         self.dataset_name = dataset_name
+        self.iid = iid
         self.batch_size = batch_size
         self.global_lr = global_lr
         self.device = device
@@ -62,20 +64,20 @@ class Server:
 
     def create_clients(self):
         self.clients = [
-            Client(self.model_name, self.model_params, self.batch_size, self.client_optimizer_func)
+            Client(model_name=self.model_name, model_params=self.model_params, batch_size=self.batch_size,
+                   optimizer_func=self.client_optimizer_func)
             for _ in range(self.clients_num)
         ]
 
-    def get_clients_parts(self):
+    def get_iid_dataset_parts(self):
         full_dataset = all_datasets[self.dataset_name]("./datasets", train=True, download=True,
                                                        transform=transforms.ToTensor())
 
         samples_per_client = len(full_dataset) // self.clients_num
-        if samples_per_client < len(full_dataset.classes):  # TODO: add samples_per_client_threshold as parameter
+        if samples_per_client < len(full_dataset.classes):
             print(f"The dataset size = {len(full_dataset)} samples is too small for {self.clients_num} clients!")
             print("Some clients will have the same data!")
 
-        # TODO: optimize stratified dataset splitting
         classes = np.unique(full_dataset.targets)
         idx_per_class = {
             cls: np.where(full_dataset.targets == cls)[0]
@@ -105,8 +107,51 @@ class Server:
 
         return clients_parts
 
+    def get_non_iid_dataset_parts(self):
+        full_dataset = all_datasets[self.dataset_name]("./datasets", train=True, download=True,
+                                                       transform=transforms.ToTensor())
+
+        shards_num = 2 * self.clients_num
+        samples_per_client = len(full_dataset) // shards_num
+        if samples_per_client < len(full_dataset.classes):
+            print(f"The dataset size = {len(full_dataset)} samples is too small for {self.clients_num} clients!")
+            print("Some clients will have the same data!")
+
+        classes = np.unique(full_dataset.targets)
+        idx_per_class = {
+            cls: np.where(full_dataset.targets == cls)[0]
+            for cls in classes
+        }
+        np.random.seed(478)
+        [np.random.shuffle(x) for x in idx_per_class.values()]
+
+        clients_parts = [[] for _ in range(self.clients_num)]
+
+        shards_idx = []
+        [shards_idx.extend(list(idx_per_class[cls])) for cls in classes]
+
+        shards = []
+        for i in range(shards_num):
+            shards.append(shards_idx[i * samples_per_client:(i + 1) * samples_per_client])
+
+        for i in range(self.clients_num):
+            shards_for_client = np.random.randint(low=len(shards), size=2)
+
+            for s in shards_for_client:
+                clients_parts[i].extend(shards[s])
+
+            for i, s in enumerate(shards_for_client):
+                shards.pop(s - i)
+
+        clients_parts = [
+            Subset(full_dataset, clients_parts[i])
+            for i in range(self.clients_num)
+        ]
+
+        return clients_parts
+
     def prepare_clients(self):
-        clients_parts = self.get_clients_parts()
+        clients_parts = self.get_iid_dataset_parts() if self.iid else self.get_non_iid_dataset_parts()
 
         for client, dataset in zip(self.clients, clients_parts):
             client.prepare(dataset)
@@ -143,7 +188,7 @@ class Server:
             current_state_dict[key].grad = -1 * self.global_model.delta_weights[key]
             self.global_model.control_variate[key] += client_fraction * self.global_model.delta_control_variate[key]
 
-        self.global_model.update_weights(self.global_model.get_weights(), lr=self.global_lr)
+        self.global_model.update_weights(weights=self.global_model.get_weights(), lr=self.global_lr)
 
     def test_step(self):
         with torch.no_grad():

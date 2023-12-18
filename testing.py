@@ -18,7 +18,9 @@ if __name__ == "__main__":
             'hidden_dim': 200,
             'output_dim': 10
         }, device="cpu",
+        lr=0.01
+        # iid=False,
     )
     sc.prepare()
 
-    sc.train()
+    sc.train(verbose=False)

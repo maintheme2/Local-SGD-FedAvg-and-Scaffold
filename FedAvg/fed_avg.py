@@ -6,8 +6,8 @@ from src.server import Server
 
 
 class FederatedAveraging:
-    def __init__(self, batch_size=10, lr=0.1, clients_num=100, rounds_num=15,
-                 epochs_num=1, client_fraction=0.2,
+    def __init__(self, batch_size=10, lr=0.01, clients_num=100, rounds_num=15,
+                 epochs_num=1, client_fraction=0.2, iid=True,
                  dataset_name="MNIST", model_name="LinearModel", model_params=None,
                  loss="crossentropy",
                  threads_num=2, device="cpu"):
@@ -15,6 +15,7 @@ class FederatedAveraging:
         self.rounds_num = rounds_num
         self.epochs_num = epochs_num
         self.client_fraction = client_fraction
+        self.iid = iid
 
         self.dataset_name = dataset_name
         self.model_name = model_name
@@ -30,10 +31,14 @@ class FederatedAveraging:
         self.server = None
 
     def prepare(self):
-        self.server = Server(self.model_name, self.model_params,
-                             self.update_weights, self.update_weights,
-                             self.clients_num, self.threads_num,
-                             self.batch_size, self.dataset_name, self.device)
+        self.server = Server(model_name=self.model_name,
+                             model_params=self.model_params,
+                             server_optimizer_func=self.update_weights,
+                             client_optimizer_func=self.update_weights,
+                             clients_num=self.clients_num,
+                             processes_num=self.threads_num,
+                             batch_size=self.batch_size, dataset_name=self.dataset_name, device=self.device,
+                             iid=self.iid)
         self.server.prepare()
 
     def train(self, verbose=True):
@@ -63,7 +68,10 @@ class FederatedAveraging:
         print("Aggregating clients weights...") if verbose else None
         self.server.global_update(clients)
 
-    def update_weights(self, weights, lr, c=None):
+    def update_weights(self, weights, lr=None, c=None):
+        if lr is None:
+            lr = self.lr
+
         with torch.no_grad():
             for key, value in weights.items():
                 value -= lr * value.grad

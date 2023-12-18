@@ -50,6 +50,6 @@ class BaseModel(nn.Module):
         loss = F.cross_entropy(outputs.cpu(), labels.cpu())
 
         loss.backward()
-        self.update_weights(self.get_weights(), c=self.control_variate)
+        self.update_weights(weights=self.get_weights(), c=self.control_variate)
 
         return loss.item()
